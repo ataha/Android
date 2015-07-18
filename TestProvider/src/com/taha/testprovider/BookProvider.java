@@ -11,7 +11,9 @@ import android.content.UriMatcher;
 import android.database.Cursor;
 import android.database.sqlite.SQLiteDatabase;
 import android.database.sqlite.SQLiteOpenHelper;
+import android.database.sqlite.SQLiteQueryBuilder;
 import android.net.Uri;
+import android.text.TextUtils;
 import android.util.Log;
 
 public class BookProvider extends ContentProvider {
@@ -90,22 +92,67 @@ public class BookProvider extends ContentProvider {
 		@Override
 		public void onUpgrade(SQLiteDatabase db, int oldVersion, int newVersion) {
 			// TODO Auto-generated method stub
-
+			Log.d(TAG, "inner onupgrade called");
+			Log.w(TAG, "Upgrading database from version " + oldVersion + " to " + newVersion + ", which will destory all old data");
+			db.execSQL("DROP TABLE IF EXISTS " + BookTableMetaData.TABLE_NAME);
+			onCreate(db);
 		}
 
 	}
+	private DatabaseHelper mOpenHelper;
+	//Component creation callback
 
 	@Override
 	public boolean onCreate() {
 		// TODO Auto-generated method stub
-		return false;
+		Log.d(TAG, "main onCreate called");
+		mOpenHelper = new DatabaseHelper(getContext());
+		return true;
 	}
 
 	@Override
 	public Cursor query(Uri uri, String[] projection, String selection,
 			String[] selectionArgs, String sortOrder) {
 		// TODO Auto-generated method stub
-		return null;
+		SQLiteQueryBuilder qb = new SQLiteQueryBuilder();
+		switch (sUriMatcher.match(uri)) {
+		case INCOMING_BOOK_COLLECTION_URI_INDICATOR:
+			qb.setTables(BookTableMetaData.TABLE_NAME);
+			qb.setProjectionMap(sBooksProjectionMap);
+			
+			break;
+
+		case INCOMING_SINGLE_BOOK_URI_INDICATOR:
+			qb.setTables(BookTableMetaData.TABLE_NAME);
+			qb.setProjectionMap(sBooksProjectionMap);
+			
+			qb.appendWhere(BookTableMetaData._ID + "=" + uri.getPathSegments().get(1));
+			break;
+			
+			default:
+				throw new IllegalArgumentException("Unkown URI " + uri);
+		}
+		
+		// If no sort order is specified use the default
+		String orderBy;
+		if(TextUtils.isEmpty(sortOrder)) {
+			orderBy = BookTableMetaData.DEFAULT_SORT_ORDER;
+		}else {
+			orderBy = sortOrder;
+		}
+		
+		// Get the database and run the query
+		SQLiteDatabase db = mOpenHelper.getReadableDatabase();
+		Cursor c = qb.query(db, projection, selection, selectionArgs, null, null, orderBy);
+		
+		
+		//example of getting a count
+		int i = c.getCount();
+		
+		//Tell the cursor what uri to watch
+		// so it knows when its source data changes
+		c.setNotificationUri(getContext().getContentResolver(), uri);
+		return c;
 	}
 
 	@Override
