@@ -5,10 +5,12 @@ import java.util.HashMap;
 import com.taha.testprovider.BookProviderMetaData.BookTableMetaData;
 
 import android.content.ContentProvider;
+import android.content.ContentUris;
 import android.content.ContentValues;
 import android.content.Context;
 import android.content.UriMatcher;
 import android.database.Cursor;
+import android.database.SQLException;
 import android.database.sqlite.SQLiteDatabase;
 import android.database.sqlite.SQLiteOpenHelper;
 import android.database.sqlite.SQLiteQueryBuilder;
@@ -93,14 +95,17 @@ public class BookProvider extends ContentProvider {
 		public void onUpgrade(SQLiteDatabase db, int oldVersion, int newVersion) {
 			// TODO Auto-generated method stub
 			Log.d(TAG, "inner onupgrade called");
-			Log.w(TAG, "Upgrading database from version " + oldVersion + " to " + newVersion + ", which will destory all old data");
+			Log.w(TAG, "Upgrading database from version " + oldVersion + " to "
+					+ newVersion + ", which will destory all old data");
 			db.execSQL("DROP TABLE IF EXISTS " + BookTableMetaData.TABLE_NAME);
 			onCreate(db);
 		}
 
 	}
+
 	private DatabaseHelper mOpenHelper;
-	//Component creation callback
+
+	// Component creation callback
 
 	@Override
 	public boolean onCreate() {
@@ -119,37 +124,38 @@ public class BookProvider extends ContentProvider {
 		case INCOMING_BOOK_COLLECTION_URI_INDICATOR:
 			qb.setTables(BookTableMetaData.TABLE_NAME);
 			qb.setProjectionMap(sBooksProjectionMap);
-			
+
 			break;
 
 		case INCOMING_SINGLE_BOOK_URI_INDICATOR:
 			qb.setTables(BookTableMetaData.TABLE_NAME);
 			qb.setProjectionMap(sBooksProjectionMap);
-			
-			qb.appendWhere(BookTableMetaData._ID + "=" + uri.getPathSegments().get(1));
+
+			qb.appendWhere(BookTableMetaData._ID + "="
+					+ uri.getPathSegments().get(1));
 			break;
-			
-			default:
-				throw new IllegalArgumentException("Unkown URI " + uri);
+
+		default:
+			throw new IllegalArgumentException("Unkown URI " + uri);
 		}
-		
+
 		// If no sort order is specified use the default
 		String orderBy;
-		if(TextUtils.isEmpty(sortOrder)) {
+		if (TextUtils.isEmpty(sortOrder)) {
 			orderBy = BookTableMetaData.DEFAULT_SORT_ORDER;
-		}else {
+		} else {
 			orderBy = sortOrder;
 		}
-		
+
 		// Get the database and run the query
 		SQLiteDatabase db = mOpenHelper.getReadableDatabase();
-		Cursor c = qb.query(db, projection, selection, selectionArgs, null, null, orderBy);
-		
-		
-		//example of getting a count
+		Cursor c = qb.query(db, projection, selection, selectionArgs, null,
+				null, orderBy);
+
+		// example of getting a count
 		int i = c.getCount();
-		
-		//Tell the cursor what uri to watch
+
+		// Tell the cursor what uri to watch
 		// so it knows when its source data changes
 		c.setNotificationUri(getContext().getContentResolver(), uri);
 		return c;
@@ -158,13 +164,67 @@ public class BookProvider extends ContentProvider {
 	@Override
 	public String getType(Uri uri) {
 		// TODO Auto-generated method stub
-		return null;
+		switch (sUriMatcher.match(uri)) {
+		case INCOMING_BOOK_COLLECTION_URI_INDICATOR:
+			return BookTableMetaData.CONTENT_TYPE;
+
+		case INCOMING_SINGLE_BOOK_URI_INDICATOR:
+			return BookTableMetaData.CONTENT_ITEM_TYPE;
+
+		default:
+			throw new IllegalArgumentException("Unkown URI" + uri);
+		}
 	}
 
 	@Override
-	public Uri insert(Uri uri, ContentValues values) {
+	public Uri insert(Uri uri, ContentValues initialValues) {
 		// TODO Auto-generated method stub
-		return null;
+		// Validate the requested uri
+
+		if (sUriMatcher.match(uri) != INCOMING_BOOK_COLLECTION_URI_INDICATOR) {
+			throw new IllegalArgumentException("Unkown URI" + uri);
+		}
+		ContentValues values;
+		if (initialValues != null) {
+
+			values = new ContentValues(initialValues);
+
+		} else {
+			values = new ContentValues();
+		}
+
+		Long now = Long.valueOf(System.currentTimeMillis());
+		// Make sure that the fields are all set
+		if (values.containsKey(BookTableMetaData.CREATED_DATE) == false) {
+			values.put(BookTableMetaData.CREATED_DATE, now);
+
+		}
+		if (values.containsKey(BookTableMetaData.MODIFIED_DATE) == false) {
+			values.put(BookTableMetaData.MODIFIED_DATE, now);
+		}
+		if (values.containsKey(BookTableMetaData.BOOK_NAME) == false) {
+			throw new SQLException(
+					"Failed to insert row because Book Name is needed " + uri);
+		}
+		if (values.containsKey(BookTableMetaData.BOOK_ISBN) == false) {
+			values.put(BookTableMetaData.BOOK_ISBN, "Unknown ISBN");
+		}
+		if (values.containsKey(BookTableMetaData.BOOK_AUTHOR) == false) {
+			values.put(BookTableMetaData.BOOK_ISBN, "Unknown Author");
+		}
+
+		SQLiteDatabase db = mOpenHelper.getWritableDatabase();
+		long rowId = db.insert(BookTableMetaData.TABLE_NAME,
+				BookTableMetaData.BOOK_NAME, values);
+		if (rowId > 0) {
+			Uri insertedBookUri = ContentUris.withAppendedId(
+					BookTableMetaData.CONTENT_URI, rowId);
+			getContext().getContentResolver().notifyChange(insertedBookUri,
+					null);
+			return insertedBookUri;
+		}
+		throw new SQLException("Failed to insert row into " + uri);
+
 	}
 
 	@Override
