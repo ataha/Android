@@ -228,16 +228,59 @@ public class BookProvider extends ContentProvider {
 	}
 
 	@Override
-	public int delete(Uri uri, String selection, String[] selectionArgs) {
+	public int delete(Uri uri, String where, String[] whereArgs) {
 		// TODO Auto-generated method stub
-		return 0;
+		SQLiteDatabase db = mOpenHelper.getWritableDatabase();
+		int count;
+		switch (sUriMatcher.match(uri)) {
+		case INCOMING_BOOK_COLLECTION_URI_INDICATOR:
+			count = db.delete(BookTableMetaData.TABLE_NAME, where, whereArgs);
+
+			break;
+
+		case INCOMING_SINGLE_BOOK_URI_INDICATOR:
+			String rowId = uri.getPathSegments().get(1);
+			count = db.delete(
+					BookTableMetaData.TABLE_NAME,
+					BookTableMetaData._ID
+							+ "="
+							+ rowId
+							+ (!TextUtils.isEmpty(where) ? " AND (" + where
+									+ ')' : ""), whereArgs);
+			break;
+
+		default:
+			throw new IllegalArgumentException("Unknown URI " + uri);
+		}
+		getContext().getContentResolver().notifyChange(uri, null);
+		return count;
 	}
 
 	@Override
-	public int update(Uri uri, ContentValues values, String selection,
-			String[] selectionArgs) {
-		// TODO Auto-generated method stub
-		return 0;
+	public int update(Uri uri, ContentValues values, String where,
+			String[] whereArgs) {
+		SQLiteDatabase db = mOpenHelper.getWritableDatabase();
+		int count;
+		switch (sUriMatcher.match(uri)) {
+		case INCOMING_BOOK_COLLECTION_URI_INDICATOR:
+			count = db.update(BookTableMetaData.TABLE_NAME, values, where,
+					whereArgs);
+			break;
+		case INCOMING_SINGLE_BOOK_URI_INDICATOR:
+			String rowId = uri.getPathSegments().get(1);
+			count = db.update(
+					BookTableMetaData.TABLE_NAME,
+					values,
+					BookTableMetaData._ID
+							+ "="
+							+ rowId
+							+ (!TextUtils.isEmpty(where) ? " AND (" + where
+									+ ')' : ""), whereArgs);
+			break;
+		default:
+			throw new IllegalArgumentException("Unknown URI " + uri);
+		}
+		getContext().getContentResolver().notifyChange(uri, null);
+		return count;
 	}
-
 }
